@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupplyOpt·AI · Optimización Logística — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#f0b35e; --accent-dim:#4a3a1f;
+    --violet:#a78bfa; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #3a2c14 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  textarea{ width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:12px; border-radius:10px; font-family:'IBM Plex Mono', monospace; font-size:13px; min-height:90px; resize:vertical; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; align-items:center; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; border:none; border-radius:10px; padding:11px 18px; cursor:pointer; background:var(--accent); color:#2b1d05; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:16px; }
+  @media (max-width:680px){ .grid2{ grid-template-columns:1fr; } }
+  .method-box{ background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .method-title{ font-family:'IBM Plex Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:10px; }
+  table{ border-collapse:collapse; width:100%; font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+  th, td{ padding:6px 10px; border:1px solid var(--line); text-align:center; }
+  th{ color:var(--dim); }
+  td.alloc{ color:var(--accent); font-weight:600; }
+  .total-cost{ margin-top:10px; font-family:'IBM Plex Mono', monospace; font-size:14px; }
+  .total-cost strong{ color:var(--good); font-size:18px; }
+  .error-box{ color:var(--bad); font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:14px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>SupplyOpt·AI</h1><span>35 · Modelos Avanzados de Optimización para IA</span></div>
+  </div>
+
+  <div class="box">
+    <div class="row"><strong style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">Problema de transporte: orígenes, destinos, oferta/demanda y costes</strong></div>
+    <div class="row">
+      <div style="flex:1; min-width:200px;">
+        <span style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--dim);">Oferta (una por origen, separada por comas)</span>
+        <textarea id="supply-input" style="min-height:40px;">20, 30, 25</textarea>
+      </div>
+      <div style="flex:1; min-width:200px;">
+        <span style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--dim);">Demanda (una por destino, separada por comas)</span>
+        <textarea id="demand-input" style="min-height:40px;">10, 35, 30</textarea>
+      </div>
+    </div>
+    <span style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--dim);">Matriz de costes (una fila por origen)</span>
+    <textarea id="cost-input">4, 6, 8
+5, 4, 3
+7, 3, 5</textarea>
+    <div class="row"><button onclick="solveTransport()">Resolver con ambos métodos</button></div>
+    <div id="transport-error"></div>
+    <div class="grid2" id="transport-results"></div>
+    <small class="hint">La <strong>oferta total</strong> debe igualar la <strong>demanda total</strong> para que el problema sea equilibrado. "Método del coste mínimo" asigna primero por la celda más barata disponible (heurística voraz); "esquina noroeste" asigna mecánicamente sin mirar el coste — sirve para ver por qué la heurística importa en logística real. Ninguno de los dos garantiza el óptimo global (para eso hría falta el método simplex de transporte / MODI), pero dan una solución factible de partida.</small>
+  </div>
+</div>
+
+<script>
+function leastCostMethod(supply, demand, cost){
+  const s = [...supply], d = [...demand];
+  const m = s.length, n = d.length;
+  const alloc = Array.from({length:m},()=>Array(n).fill(0));
+  const used = Array.from({length:m},()=>Array(n).fill(false));
+  let remaining = m*n;
+  while (remaining>0){
+    let best = null;
+    for (let i=0;i<m;i++) for (let j=0;j<n;j++){
+      if (used[i][j] || s[i]<=0 || d[j]<=0) continue;
+      if (!best || cost[i][j] < best.c) best = { i,j,c:cost[i][j] };
+    }
+    if (!best) break;
+    const { i,j } = best;
+    const qty = Math.min(s[i], d[j]);
+    alloc[i][j] = qty;
+    s[i]-=qty; d[j]-=qty;
+    used[i][j] = true;
+    remaining--;
+  }
+  const totalCost = alloc.reduce((sum,row,i)=>sum+row.reduce((s2,v,j)=>s2+v*cost[i][j],0),0);
+  return { alloc, totalCost };
+}
+function northwestCorner(supply, demand, cost){
+  const s=[...supply], d=[...demand];
+  const m=s.length, n=d.length;
+  const alloc = Array.from({length:m},()=>Array(n).fill(0));
+  let i=0,j=0;
+  while (i<m && j<n){
+    const qty = Math.min(s[i],d[j]);
+    alloc[i][j]=qty; s[i]-=qty; d[j]-=qty;
+    if (s[i]===0 && i<m-1) i++; else if (d[j]===0 && j<n-1) j++; else break;
+  }
+  const totalCost = alloc.reduce((sum,row,i)=>sum+row.reduce((s2,v,j)=>s2+v*cost[i][j],0),0);
+  return { alloc, totalCost };
+}
+
+function renderTable(alloc, cost, supply, demand){
+  let html = '<table><thead><tr><th></th>' + demand.map((d,j)=>`<th>D${j+1} (${d})</th>`).join('') + '</tr></thead><tbody>';
+  alloc.forEach((row,i) => {
+    html += `<tr><th>O${i+1} (${supply[i]})</th>` + row.map((v,j) => `<td class="${v>0?'alloc':''}">${v>0?v:''}<br><span style="color:var(--dim); font-size:10px;">c=${cost[i][j]}</span></td>`).join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function solveTransport(){
+  const errEl = document.getElementById('transport-error');
+  errEl.innerHTML = '';
+  let supply, demand, cost;
+  try {
+    supply = document.getElementById('supply-input').value.split(',').map(v=>parseFloat(v.trim()));
+    demand = document.getElementById('demand-input').value.split(',').map(v=>parseFloat(v.trim()));
+    cost = document.getElementById('cost-input').value.trim().split('\n').map(r => r.split(',').map(v=>parseFloat(v.trim())));
+    if (supply.some(isNaN) || demand.some(isNaN) || cost.some(r=>r.some(isNaN))) throw new Error('Revisa que todos los valores sean números.');
+    if (cost.length !== supply.length || cost.some(r => r.length !== demand.length)) throw new Error(`La matriz de costes debe ser ${supply.length}×${demand.length} (orígenes × destinos).`);
+  } catch(e){ errEl.innerHTML = `<div class="error-box">⚠ ${e.message}</div>`; return; }
+
+  const totalSupply = supply.reduce((a,b)=>a+b,0), totalDemand = demand.reduce((a,b)=>a+b,0);
+  if (totalSupply !== totalDemand){
+    errEl.innerHTML = `<div class="error-box">⚠ Problema no equilibrado: oferta total = ${totalSupply}, demanda total = ${totalDemand}. Deben coincidir.</div>`;
+    return;
+  }
+
+  const lc = leastCostMethod(supply, demand, cost);
+  const nw = northwestCorner(supply, demand, cost);
+
+  document.getElementById('transport-results').innerHTML = `
+    <div class="method-box">
+      <div class="method-title">Método del coste mínimo</div>
+      ${renderTable(lc.alloc, cost, supply, demand)}
+      <div class="total-cost">Coste total: <strong>${lc.totalCost}</strong></div>
+    </div>
+    <div class="method-box">
+      <div class="method-title">Esquina noroeste</div>
+      ${renderTable(nw.alloc, cost, supply, demand)}
+      <div class="total-cost">Coste total: <strong>${nw.totalCost}</strong></div>
+    </div>
+  `;
+}
+solveTransport();
+</script>
+</body>
+</html>

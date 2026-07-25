@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ManifoldIA · Manifold Learning — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#a78bfa; --accent-dim:#3a2f5c;
+    --amber:#f0b35e; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #241a3a 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:20px; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+  select, input[type=number]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  input[type=number]{ width:70px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; border:none; border-radius:10px; padding:11px 18px; cursor:pointer; background:var(--accent); color:#1c1330; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  button.secondary{ background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  canvas{ width:100%; height:280px; background:var(--panel2); border-radius:10px; display:block; }
+  .panel-title{ font-family:'IBM Plex Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:10px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:700px){ .grid2{ grid-template-columns:1fr; } }
+  .strip-canvas{ height:70px; }
+  .result-banner{ background:var(--panel2); border:1px solid var(--accent-dim); border-radius:10px; padding:14px 18px; margin-top:14px; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:12px; line-height:1.6; }
+  .loading{ color:var(--dim); font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>ManifoldIA</h1><span>27 · Manifold Learning</span></div>
+  </div>
+
+  <div class="box">
+    <div class="panel-title">Datos: espiral no lineal (el "manifold" a desenrollar)</div>
+    <canvas id="orig-canvas" width="800" height="280"></canvas>
+    <div class="row" style="margin-top:16px;">
+      <button class="secondary" onclick="generateSpiral()">Nueva espiral</button>
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">vecinos k =</span>
+      <input type="number" id="k-neighbors" value="6" min="3" max="15">
+      <button onclick="runComparison()">Ejecutar PCA vs Isomap</button>
+    </div>
+    <small class="hint">Los puntos están coloreados según su posición real a lo largo de la espiral (azul → rojo). Una buena técnica de reducción de dimensión debería recuperar ese mismo orden de color en una sola dimensión.</small>
+  </div>
+
+  <div class="grid2">
+    <div class="box">
+      <div class="panel-title">PCA (lineal) → 1D</div>
+      <canvas id="pca-canvas" class="strip-canvas" width="380" height="70"></canvas>
+      <div class="result-banner" id="pca-result">Pulsa "Ejecutar" arriba.</div>
+    </div>
+    <div class="box">
+      <div class="panel-title">Isomap (no lineal) → 1D</div>
+      <canvas id="isomap-canvas" class="strip-canvas" width="380" height="70"></canvas>
+      <div class="result-banner" id="isomap-result">Pulsa "Ejecutar" arriba.</div>
+    </div>
+  </div>
+  <small class="hint">PCA proyecta sobre la dirección de máxima varianza en línea recta, así que "corta" la espiral en vez de desenrollarla — colores mezclados. Isomap construye primero el grafo de k-vecinos más cercanos, calcula distancias geodésicas sobre ese grafo con el algoritmo de Dijkstra, y aplica escalado multidimensional clásico (autovalores vía el método de Jacobi) — el resultado real, no aproximado por IA, debería mostrar los colores en un degradado limpio.</small>
+</div>
+
+<script>
+let points = [], tvals = [];
+
+function generateSpiral(){
+  const N = 100;
+  points = []; tvals = [];
+  for (let i=0;i<N;i++){
+    const t = 1 + 3.5*Math.PI*(i/N);
+    const jitter = (Math.random()-0.5)*0.15;
+    const r = 0.35*t;
+    points.push([r*Math.cos(t)+jitter, r*Math.sin(t)+jitter]);
+    tvals.push(t);
+  }
+  drawOriginal();
+  document.getElementById('pca-result').textContent = 'Pulsa "Ejecutar" arriba.';
+  document.getElementById('isomap-result').textContent = 'Pulsa "Ejecutar" arriba.';
+  document.getElementById('pca-canvas').getContext('2d').clearRect(0,0,380,70);
+  document.getElementById('isomap-canvas').getContext('2d').clearRect(0,0,380,70);
+}
+
+function colorFor(t){
+  const tmin = Math.min(...tvals), tmax = Math.max(...tvals);
+  const frac = (t-tmin)/(tmax-tmin);
+  const r = Math.round(240*frac + 60*(1-frac));
+  const b = Math.round(220*(1-frac) + 60*frac);
+  return `rgb(${r},90,${b})`;
+}
+
+function drawOriginal(){
+  const canvas = document.getElementById('orig-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const xs = points.map(p=>p[0]), ys = points.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const pad=30;
+  const toPx = (x,y) => [pad + (x-minX)/(maxX-minX)*(canvas.width-2*pad), canvas.height-pad - (y-minY)/(maxY-minY)*(canvas.height-2*pad)];
+  points.forEach((p,i) => {
+    const [px,py] = toPx(p[0],p[1]);
+    ctx.beginPath(); ctx.arc(px,py,5,0,2*Math.PI); ctx.fillStyle = colorFor(tvals[i]); ctx.fill();
+  });
+}
+
+function drawStrip(canvasId, values){
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const minV = Math.min(...values), maxV = Math.max(...values);
+  const pad=15;
+  values.forEach((v,i) => {
+    const x = pad + (v-minV)/(maxV-minV || 1)*(canvas.width-2*pad);
+    ctx.beginPath(); ctx.arc(x, canvas.height/2, 5, 0, 2*Math.PI);
+    ctx.fillStyle = colorFor(tvals[i]); ctx.fill();
+  });
+}
+
+// ---------- PCA 1D ----------
+function runPCA1D(){
+  const n = points.length;
+  const mx = points.reduce((s,p)=>s+p[0],0)/n, my = points.reduce((s,p)=>s+p[1],0)/n;
+  let sxx=0,syy=0,sxy=0;
+  points.forEach(p => { const dx=p[0]-mx, dy=p[1]-my; sxx+=dx*dx; syy+=dy*dy; sxy+=dx*dy; });
+  sxx/=n; syy/=n; sxy/=n;
+  const trace=sxx+syy, det=sxx*syy-sxy*sxy;
+  const disc = Math.sqrt(Math.max(0,(trace*trace)/4-det));
+  const l1 = trace/2+disc;
+  let v1;
+  if (Math.abs(sxy)>1e-9) v1=[l1-syy, sxy]; else v1 = sxx>=syy?[1,0]:[0,1];
+  const norm = Math.hypot(v1[0],v1[1])||1; v1=[v1[0]/norm, v1[1]/norm];
+  return points.map(p => (p[0]-mx)*v1[0] + (p[1]-my)*v1[1]);
+}
+
+// ---------- Isomap 1D ----------
+function dist2(a,b){ return Math.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2); }
+function dijkstra(adj, src, n){
+  const dist = new Array(n).fill(Infinity); dist[src]=0;
+  const visited = new Array(n).fill(false);
+  for (let iter=0; iter<n; iter++){
+    let u=-1, best=Infinity;
+    for (let i=0;i<n;i++) if (!visited[i] && dist[i]<best){ best=dist[i]; u=i; }
+    if (u===-1) break;
+    visited[u]=true;
+    adj[u].forEach(([v,w]) => { if (dist[u]+w < dist[v]) dist[v]=dist[u]+w; });
+  }
+  return dist;
+}
+function jacobiEigen(Ain, maxSweeps=60){
+  const n = Ain.length;
+  let A = Ain.map(r=>[...r]);
+  let V = Array.from({length:n}, (_,i)=>Array.from({length:n},(_,j)=>i===j?1:0));
+  for (let sweep=0; sweep<maxSweeps; sweep++){
+    let off=0;
+    for (let i=0;i<n;i++) for (let j=i+1;j<n;j++) off += A[i][j]*A[i][j];
+    if (off<1e-9) break;
+    for (let p=0;p<n;p++){
+      for (let q=p+1;q<n;q++){
+        if (Math.abs(A[p][q])<1e-12) continue;
+        const theta = (A[q][q]-A[p][p])/(2*A[p][q]);
+        const t = Math.sign(theta||1)/(Math.abs(theta)+Math.sqrt(theta*theta+1));
+        const c = 1/Math.sqrt(t*t+1), s = t*c;
+        const app=A[p][p], aqq=A[q][q], apq=A[p][q];
+        A[p][p]=c*c*app-2*s*c*apq+s*s*aqq;
+        A[q][q]=s*s*app+2*s*c*apq+c*c*aqq;
+        A[p][q]=0; A[q][p]=0;
+        for (let i=0;i<n;i++){
+          if (i!==p && i!==q){
+            const aip=A[i][p], aiq=A[i][q];
+            A[i][p]=c*aip-s*aiq; A[p][i]=A[i][p];
+            A[i][q]=s*aip+c*aiq; A[q][i]=A[i][q];
+          }
+        }
+        for (let i=0;i<n;i++){
+          const vip=V[i][p], viq=V[i][q];
+          V[i][p]=c*vip-s*viq; V[i][q]=s*vip+c*viq;
+        }
+      }
+    }
+  }
+  return { eigenvalues: A.map((row,i)=>row[i]), V };
+}
+
+function runIsomap1D(k){
+  const n = points.length;
+  const adj = Array.from({length:n}, ()=>[]);
+  for (let i=0;i<n;i++){
+    const dists = [];
+    for (let j=0;j<n;j++) if (j!==i) dists.push([j, dist2(points[i],points[j])]);
+    dists.sort((a,b)=>a[1]-b[1]);
+    for (let m=0;m<Math.min(k,dists.length);m++){
+      const [j,d]=dists[m];
+      adj[i].push([j,d]); adj[j].push([i,d]);
+    }
+  }
+  const D = [];
+  for (let i=0;i<n;i++) D.push(dijkstra(adj,i,n));
+  const connected = D.every(row => row.every(v=>isFinite(v)));
+  const D2 = D.map(row => row.map(v => isFinite(v) ? v*v : 1e8));
+  const rowMean = D2.map(row => row.reduce((a,b)=>a+b,0)/n);
+  const grandMean = rowMean.reduce((a,b)=>a+b,0)/n;
+  const B = Array.from({length:n}, (_,i) => Array.from({length:n}, (_,j) => -0.5*(D2[i][j]-rowMean[i]-rowMean[j]+grandMean)));
+  const { eigenvalues, V } = jacobiEigen(B);
+  const idxSorted = eigenvalues.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]);
+  const [l1,i1] = idxSorted[0];
+  const embed1 = V.map(row => row[i1]*Math.sqrt(Math.max(l1,0)));
+  return { embed1, connected, eigenvalues: idxSorted.slice(0,3).map(x=>x[0]) };
+}
+
+function corr(a,b){
+  const ma=a.reduce((s,x)=>s+x,0)/a.length, mb=b.reduce((s,x)=>s+x,0)/b.length;
+  const num = a.reduce((s,x,i)=>s+(x-ma)*(b[i]-mb),0);
+  const denom = Math.sqrt(a.reduce((s,x)=>s+(x-ma)**2,0) * b.reduce((s,x)=>s+(x-mb)**2,0));
+  return num/denom;
+}
+
+function runComparison(){
+  document.getElementById('isomap-result').innerHTML = '<span class="loading">Calculando (kNN + Dijkstra + Jacobi)...</span>';
+  setTimeout(() => {
+    const pca1d = runPCA1D();
+    drawStrip('pca-canvas', pca1d);
+    const corrPCA = Math.abs(corr(tvals, pca1d));
+    document.getElementById('pca-result').innerHTML = `Correlación con la posición real en la espiral: <strong>${corrPCA.toFixed(3)}</strong> (cuanto más cerca de 1, mejor desenrollado)`;
+
+    const k = parseInt(document.getElementById('k-neighbors').value);
+    const { embed1, connected, eigenvalues } = runIsomap1D(k);
+    drawStrip('isomap-canvas', embed1);
+    const corrIso = Math.abs(corr(tvals, embed1));
+    document.getElementById('isomap-result').innerHTML = `Correlación con la posición real: <strong>${corrIso.toFixed(3)}</strong>${connected?'':' · ⚠ el grafo de k-vecinos no está conectado, sube k'} · autovalores top: ${eigenvalues.map(v=>v.toFixed(0)).join(', ')}`;
+  }, 30);
+}
+
+generateSpiral();
+</script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroDeep·AI · Redes Neuronales y Deep Learning — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#a78bfa; --accent-dim:#3a2f5c;
+    --amber:#f0b35e; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #241a3a 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:720px){ .grid2{ grid-template-columns:1fr; } }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  canvas{ width:100%; height:280px; background:var(--panel2); border-radius:10px; display:block; }
+  .panel-title{ font-family:'IBM Plex Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin:16px 0; align-items:center; }
+  select{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; border:none; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#1c1330; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  button.secondary{ background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  .result-banner{ background:var(--panel2); border:1px solid var(--accent-dim); border-radius:10px; padding:14px 18px; margin-top:14px; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:12px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>NeuroDeep·AI</h1><span>30 · Redes Neuronales y Deep Learning</span></div>
+  </div>
+
+  <div class="row">
+    <select id="dataset">
+      <option value="xor">XOR (no separable linealmente)</option>
+      <option value="circle">Círculo dentro de círculo</option>
+      <option value="linear">Separable linealmente</option>
+    </select>
+    <button class="secondary" onclick="resetNetwork()">Reiniciar red (pesos aleatorios)</button>
+    <button onclick="trainSteps(200)">Entrenar 200 épocas</button>
+    <button onclick="trainSteps(1000)">Entrenar 1000 épocas</button>
+  </div>
+
+  <div class="grid2">
+    <div class="box">
+      <div class="panel-title">Arquitectura: 2 entradas → 4 ocultas (tanh) → 1 salida (sigmoide)</div>
+      <canvas id="net-canvas" width="380" height="280"></canvas>
+    </div>
+    <div class="box">
+      <div class="panel-title">Frontera de decisión aprendida</div>
+      <canvas id="boundary-canvas" width="380" height="280"></canvas>
+    </div>
+  </div>
+  <div class="result-banner" id="train-result">Pulsa "Entrenar" para empezar el descenso de gradiente (backpropagation real, sin IA generativa).</div>
+  <small class="hint">Izquierda: grosor y color de cada conexión = magnitud y signo del peso (verde positivo, rojo negativo) — así se ve la red "reorganizarse" al entrenar. Derecha: la región que la red clasifica como clase A (verde) vs clase B (naranja), recalculada tras cada tanda de entrenamiento.</small>
+</div>
+
+<script>
+const nIn=2, nHid=4, nOut=1;
+let W1, b1, W2, b2;
+let data = [];
+let totalEpochs = 0;
+
+function rnd(){ return (Math.random()*2-1)*0.6; }
+function resetNetwork(){
+  W1 = Array.from({length:nHid}, ()=>Array.from({length:nIn}, rnd));
+  b1 = Array.from({length:nHid}, rnd);
+  W2 = Array.from({length:nOut}, ()=>Array.from({length:nHid}, rnd));
+  b2 = Array.from({length:nOut}, rnd);
+  totalEpochs = 0;
+  document.getElementById('train-result').textContent = 'Red reiniciada. Pulsa "Entrenar" para empezar.';
+  drawNetwork(); drawBoundary();
+}
+
+function loadDataset(){
+  const type = document.getElementById('dataset').value;
+  data = [];
+  if (type==='xor'){
+    data = [[[0.1,0.1],0],[[0.1,0.9],1],[[0.9,0.1],1],[[0.9,0.9],0]];
+    for (let i=0;i<10;i++){
+      const [bx,by] = [[0.1,0.1],[0.1,0.9],[0.9,0.1],[0.9,0.9]][i%4];
+      const lbl = (bx<0.5)===(by<0.5) ? 0 : 1;
+      data.push([[bx+(Math.random()-0.5)*0.15, by+(Math.random()-0.5)*0.15], lbl]);
+    }
+  } else if (type==='circle'){
+    for (let i=0;i<20;i++){
+      const ang=Math.random()*2*Math.PI, r=Math.random()*0.2;
+      data.push([[0.5+r*Math.cos(ang), 0.5+r*Math.sin(ang)], 0]);
+    }
+    for (let i=0;i<20;i++){
+      const ang=Math.random()*2*Math.PI, r=0.35+Math.random()*0.15;
+      data.push([[0.5+r*Math.cos(ang), 0.5+r*Math.sin(ang)], 1]);
+    }
+  } else {
+    for (let i=0;i<20;i++) data.push([[Math.random()*0.4, Math.random()], 0]);
+    for (let i=0;i<20;i++) data.push([[0.6+Math.random()*0.4, Math.random()], 1]);
+  }
+  resetNetwork();
+}
+document.getElementById('dataset').addEventListener('change', loadDataset);
+
+function tanh(x){ return Math.tanh(x); }
+function dtanh(y){ return 1-y*y; }
+function sigmoid(x){ return 1/(1+Math.exp(-x)); }
+
+function forward(x){
+  const h = W1.map((row,i) => tanh(row.reduce((s,w,j)=>s+w*x[j],0)+b1[i]));
+  const o = W2.map((row,i) => sigmoid(row.reduce((s,w,j)=>s+w*h[j],0)+b2[i]));
+  return { h, o };
+}
+
+function trainSteps(nEpochs){
+  const lr = 0.6;
+  for (let epoch=0; epoch<nEpochs; epoch++){
+    data.forEach(([x,y]) => {
+      const { h, o } = forward(x);
+      const oErr = o.map((oi) => (oi - y) * oi*(1-oi));
+      const gW2 = W2.map((row,i) => row.map((w,j) => oErr[i]*h[j]));
+      const gb2 = oErr.slice();
+      const hErr = h.map((hi,j) => {
+        let s=0; for (let i=0;i<nOut;i++) s += oErr[i]*W2[i][j];
+        return s * dtanh(hi);
+      });
+      const gW1 = W1.map((row,i) => row.map((w,j) => hErr[i]*x[j]));
+      const gb1 = hErr.slice();
+      for (let i=0;i<nOut;i++){ for (let j=0;j<nHid;j++) W2[i][j] -= lr*gW2[i][j]; b2[i] -= lr*gb2[i]; }
+      for (let i=0;i<nHid;i++){ for (let j=0;j<nIn;j++) W1[i][j] -= lr*gW1[i][j]; b1[i] -= lr*gb1[i]; }
+    });
+  }
+  totalEpochs += nEpochs;
+  let correct=0;
+  data.forEach(([x,y]) => { const {o}=forward(x); if ((o[0]>=0.5?1:0)===y) correct++; });
+  document.getElementById('train-result').innerHTML = `Total: ${totalEpochs} épocas · precisión sobre los datos de entrenamiento: ${correct}/${data.length} (${(100*correct/data.length).toFixed(0)}%)`;
+  drawNetwork(); drawBoundary();
+}
+
+function drawNetwork(){
+  const canvas = document.getElementById('net-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const inX=50, hidX=190, outX=330;
+  const inY = [90,190], hidY=[40,110,180,250], outY=[145];
+
+  function edgeColor(w){ return w>=0 ? `rgba(143,227,160,${Math.min(1,Math.abs(w))})` : `rgba(242,120,120,${Math.min(1,Math.abs(w))})`; }
+
+  // W1: input -> hidden
+  W1.forEach((row,i) => row.forEach((w,j) => {
+    ctx.strokeStyle = edgeColor(w); ctx.lineWidth = Math.min(4, Math.abs(w)*2.5)+0.3;
+    ctx.beginPath(); ctx.moveTo(inX, inY[j]); ctx.lineTo(hidX, hidY[i]); ctx.stroke();
+  }));
+  // W2: hidden -> output
+  W2.forEach((row,i) => row.forEach((w,j) => {
+    ctx.strokeStyle = edgeColor(w); ctx.lineWidth = Math.min(4, Math.abs(w)*2.5)+0.3;
+    ctx.beginPath(); ctx.moveTo(hidX, hidY[j]); ctx.lineTo(outX, outY[i]); ctx.stroke();
+  }));
+  function node(x,y,label){
+    ctx.beginPath(); ctx.arc(x,y,14,0,2*Math.PI); ctx.fillStyle='#161b28'; ctx.fill();
+    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='#dfe4ee'; ctx.font='11px IBM Plex Mono, monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, x, y);
+  }
+  inY.forEach((y,i) => node(inX,y,'x'+(i+1)));
+  hidY.forEach((y,i) => node(hidX,y,'h'+(i+1)));
+  outY.forEach((y,i) => node(outX,y,'ŷ'));
+}
+
+function drawBoundary(){
+  const canvas = document.getElementById('boundary-canvas');
+  const ctx = canvas.getContext('2d');
+  const step = 6;
+  for (let px=0; px<canvas.width; px+=step){
+    for (let py=0; py<canvas.height; py+=step){
+      const x = px/canvas.width, y = py/canvas.height;
+      const { o } = forward([x,y]);
+      ctx.fillStyle = o[0]>=0.5 ? `rgba(240,179,94,${0.15+0.35*(o[0]-0.5)*2})` : `rgba(108,232,209,${0.15+0.35*(0.5-o[0])*2})`;
+      ctx.fillRect(px,py,step,step);
+    }
+  }
+  data.forEach(([[x,y],label]) => {
+    ctx.beginPath(); ctx.arc(x*canvas.width, y*canvas.height, 5, 0, 2*Math.PI);
+    ctx.fillStyle = label===1 ? '#f0b35e' : '#6ce8d1';
+    ctx.fill(); ctx.strokeStyle='#0b0e14'; ctx.lineWidth=1; ctx.stroke();
+  });
+}
+
+loadDataset();
+</script>
+</body>
+</html>

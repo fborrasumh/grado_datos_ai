@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HilbertML·AI · Espacios de Hilbert en ML — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#a78bfa; --accent-dim:#3a2f5c;
+    --amber:#f0b35e; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #241a3a 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  canvas{ width:100%; height:340px; background:var(--panel2); border-radius:10px; display:block; cursor:crosshair; margin-top:12px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+  select, input[type=number], input[type=range]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; border:none; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#1c1330; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  button.secondary{ background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.active-mode{ outline:2px solid var(--accent); }
+  .result-banner{ background:var(--panel2); border:1px solid var(--accent-dim); border-radius:10px; padding:14px 18px; margin-top:14px; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:10px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>HilbertML·AI</h1><span>29 · Métodos de Espacios de Hilbert en ML</span></div>
+  </div>
+
+  <div class="box">
+    <div class="row">
+      <button id="mode-a" class="active-mode" onclick="setMode(1)">🔵 Clase A</button>
+      <button id="mode-b" class="secondary" onclick="setMode(-1)">🟠 Clase B</button>
+      <select id="kernel-type">
+        <option value="rbf">Kernel RBF (gaussiano)</option>
+        <option value="linear">Kernel lineal (sin truco del kernel)</option>
+        <option value="poly">Kernel polinómico (grado 3)</option>
+      </select>
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">γ</span>
+      <input type="range" id="gamma" min="0.05" max="1" step="0.05" value="0.3" style="width:110px;">
+    </div>
+    <div class="row">
+      <button class="secondary" onclick="seedCircles()">Círculos concéntricos (no separable linealmente)</button>
+      <button class="secondary" onclick="clearPoints()">Borrar</button>
+      <button onclick="trainKernel()">Entrenar (perceptrón con kernel)</button>
+    </div>
+    <canvas id="kernel-canvas" width="800" height="340" onclick="addPoint(event)"></canvas>
+    <div class="result-banner" id="kernel-result">Genera los círculos o dibuja tus propios puntos, y entrena.</div>
+    <small class="hint">El fondo coloreado es la región de decisión real: para cada píxel se evalúa f(x) = Σ αᵢ yᵢ k(xᵢ, x) con el kernel elegido. Prueba primero con "kernel lineal" sobre los círculos — verás que no puede separarlos (viven en un espacio donde no son linealmente separables). Cambia a RBF: el truco del kernel proyecta implícitamente a un espacio de Hilbert de mayor dimensión donde sí lo son, sin calcular esa proyección explícitamente.</small>
+  </div>
+</div>
+
+<script>
+let points = []; // [x,y,class] en pixeles
+let mode = 1;
+let alpha = [];
+let trained = false;
+
+function setMode(m){
+  mode = m;
+  document.getElementById('mode-a').className = m===1 ? 'active-mode' : 'secondary';
+  document.getElementById('mode-b').className = m===-1 ? 'active-mode' : 'secondary';
+}
+function addPoint(e){
+  const rect = e.target.getBoundingClientRect();
+  const scaleX = e.target.width/rect.width, scaleY = e.target.height/rect.height;
+  points.push([(e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY, mode]);
+  trained = false;
+  drawKernel();
+}
+function seedCircles(){
+  points = [];
+  const cx=400, cy=170;
+  for (let i=0;i<28;i++){
+    const ang = Math.random()*2*Math.PI, r = Math.random()*55;
+    points.push([cx+r*Math.cos(ang), cy+r*Math.sin(ang), 1]);
+  }
+  for (let i=0;i<32;i++){
+    const ang = Math.random()*2*Math.PI, r = 130+Math.random()*55;
+    points.push([cx+r*Math.cos(ang), cy+r*Math.sin(ang), -1]);
+  }
+  trained = false;
+  drawKernel();
+}
+function clearPoints(){ points=[]; trained=false; drawKernel(); document.getElementById('kernel-result').textContent='Genera los círculos o dibuja tus propios puntos, y entrena.'; }
+
+function kernel(a,b,gamma,type){
+  const dot = a[0]*b[0]+a[1]*b[1];
+  if (type==='linear') return dot;
+  if (type==='poly') return Math.pow(dot/40000+1, 3);
+  const dx=a[0]-b[0], dy=a[1]-b[1];
+  return Math.exp(-gamma*(dx*dx+dy*dy)/8000);
+}
+
+function decision(p, gamma, type){
+  let s=0;
+  for (let i=0;i<points.length;i++) if (alpha[i]) s += alpha[i]*points[i][2]*kernel(points[i],p,gamma,type);
+  return s;
+}
+
+function trainKernel(){
+  const classA = points.filter(p=>p[2]===1).length, classB = points.filter(p=>p[2]===-1).length;
+  if (classA<2 || classB<2){ document.getElementById('kernel-result').textContent='Necesitas al menos 2 puntos de cada clase.'; return; }
+  const gamma = parseFloat(document.getElementById('gamma').value);
+  const type = document.getElementById('kernel-type').value;
+  alpha = new Array(points.length).fill(0);
+  let epochs=0, mistakes=1;
+  while (mistakes>0 && epochs<25){
+    mistakes=0;
+    for (let i=0;i<points.length;i++){
+      const pred = decision(points[i], gamma, type) >= 0 ? 1 : -1;
+      if (pred !== points[i][2]){ alpha[i] += 1; mistakes++; }
+    }
+    epochs++;
+  }
+  trained = true;
+  let correct=0;
+  points.forEach(p => { if ((decision(p,gamma,type)>=0?1:-1)===p[2]) correct++; });
+  document.getElementById('kernel-result').innerHTML = `Perceptrón con kernel "${type}" · ${epochs} épocas · precisión: ${correct}/${points.length} (${(100*correct/points.length).toFixed(0)}%) · vectores soporte activos: ${alpha.filter(a=>a>0).length}`;
+  drawKernel(gamma, type);
+}
+
+function drawKernel(gamma, type){
+  const canvas = document.getElementById('kernel-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if (trained){
+    const step = 8;
+    for (let x=0;x<canvas.width;x+=step){
+      for (let y=0;y<canvas.height;y+=step){
+        const d = decision([x,y], gamma, type);
+        ctx.fillStyle = d>=0 ? 'rgba(108,232,209,0.15)' : 'rgba(240,179,94,0.15)';
+        ctx.fillRect(x,y,step,step);
+      }
+    }
+  }
+  points.forEach(p => {
+    ctx.beginPath(); ctx.arc(p[0],p[1],6,0,2*Math.PI);
+    ctx.fillStyle = p[2]===1 ? '#6ce8d1' : '#f0b35e';
+    ctx.fill();
+    ctx.strokeStyle = '#0b0e14'; ctx.lineWidth=1; ctx.stroke();
+  });
+}
+seedCircles();
+</script>
+</body>
+</html>

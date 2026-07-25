@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLClassIA · Clasificación y Reducción de Dimensión — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#6ce8d1; --accent-dim:#2c4a44;
+    --amber:#f0b35e; --violet:#a78bfa; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #14203a 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .tabs{ display:flex; gap:6px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+  .tab{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); padding:12px 18px; cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active{ color:var(--accent); border-color:var(--accent); }
+  .panel{ display:none; } .panel.active{ display:block; }
+
+  .play-box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  canvas{ width:100%; height:340px; background:var(--panel2); border-radius:10px; display:block; cursor:crosshair; margin-top:12px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+  select, input[type=number]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  input[type=number]{ width:70px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; border:none; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#062420; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  button.secondary{ background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  .result-banner{ background:var(--panel2); border:1px solid var(--accent-dim); border-radius:10px; padding:14px 18px; margin-top:14px; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:10px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>MLClassIA</h1><span>26 · Clasificación y Reducción de Dimensión</span></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="kmeans">K-means</div>
+    <div class="tab" data-tab="pca">PCA</div>
+  </div>
+
+  <div class="panel active" id="panel-kmeans">
+    <div class="play-box">
+      <div class="row">
+        <button class="secondary" onclick="seedData('blobs')">Generar 3 grupos</button>
+        <button class="secondary" onclick="seedData('random')">Generar aleatorio</button>
+        <button class="secondary" onclick="clearPoints()">Borrar puntos</button>
+        <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">k =</span>
+        <input type="number" id="kmeans-k" value="3" min="2" max="6">
+        <button onclick="runKMeans()">Ejecutar K-means</button>
+      </div>
+      <canvas id="kmeans-canvas" width="800" height="340" onclick="addPointKMeans(event)"></canvas>
+      <div class="result-banner" id="kmeans-result"></div>
+      <small class="hint">Haz clic en el lienzo para añadir puntos manualmente, o genera datos de ejemplo. K-means asigna cada punto al centroide más cercano y recalcula centroides hasta converger (algoritmo de Lloyd real, sin IA).</small>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-pca">
+    <div class="play-box">
+      <div class="row">
+        <button class="secondary" onclick="seedDataPCA()">Generar nube de puntos correlacionada</button>
+        <button class="secondary" onclick="clearPointsPCA()">Borrar puntos</button>
+        <button onclick="runPCA()">Calcular componentes principales</button>
+      </div>
+      <canvas id="pca-canvas" width="800" height="340" onclick="addPointPCA(event)"></canvas>
+      <div class="result-banner" id="pca-result"></div>
+      <small class="hint">Haz clic para añadir puntos (cuanta más correlación entre X e Y, más alargada la nube). El primer componente principal (línea larga) es la dirección de máxima varianza; el segundo (línea corta) es ortogonal al primero.</small>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ================= K-MEANS =================
+let kmPoints = [];
+let kmClusters = null; // {assignments, centroids}
+const clusterColors = ['#6ce8d1','#f0b35e','#a78bfa','#f27878','#8fe3a0','#5eb5f0'];
+
+function seedData(mode){
+  kmPoints = [];
+  const canvas = document.getElementById('kmeans-canvas');
+  const W = canvas.width, H = canvas.height;
+  if (mode==='blobs'){
+    const centers = [[W*0.25,H*0.3],[W*0.7,H*0.25],[W*0.5,H*0.75]];
+    centers.forEach(([cx,cy]) => {
+      for (let i=0;i<18;i++){
+        kmPoints.push([cx+(Math.random()-0.5)*90, cy+(Math.random()-0.5)*90]);
+      }
+    });
+  } else {
+    for (let i=0;i<50;i++) kmPoints.push([Math.random()*W, Math.random()*H]);
+  }
+  kmClusters = null;
+  drawKMeans();
+}
+function clearPoints(){ kmPoints=[]; kmClusters=null; drawKMeans(); document.getElementById('kmeans-result').innerHTML=''; }
+function addPointKMeans(e){
+  const rect = e.target.getBoundingClientRect();
+  const scaleX = e.target.width/rect.width, scaleY = e.target.height/rect.height;
+  kmPoints.push([(e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY]);
+  kmClusters = null;
+  drawKMeans();
+}
+
+function runKMeans(){
+  const k = parseInt(document.getElementById('kmeans-k').value);
+  if (kmPoints.length < k){ document.getElementById('kmeans-result').innerHTML = 'Añade al menos '+k+' puntos.'; return; }
+  let centroids = [];
+  const shuffled = [...kmPoints].sort(()=>Math.random()-0.5);
+  for (let i=0;i<k;i++) centroids.push([...shuffled[i]]);
+
+  let assignments = new Array(kmPoints.length).fill(0);
+  let iterations = 0;
+  let changed = true;
+  while (changed && iterations < 50){
+    changed = false;
+    iterations++;
+    kmPoints.forEach((p,i) => {
+      let best=0, bestDist=Infinity;
+      centroids.forEach((c,ci) => {
+        const d = (p[0]-c[0])**2+(p[1]-c[1])**2;
+        if (d<bestDist){ bestDist=d; best=ci; }
+      });
+      if (assignments[i]!==best){ assignments[i]=best; changed=true; }
+    });
+    centroids = centroids.map((c,ci) => {
+      const members = kmPoints.filter((_,i)=>assignments[i]===ci);
+      if (!members.length) return c;
+      return [members.reduce((s,p)=>s+p[0],0)/members.length, members.reduce((s,p)=>s+p[1],0)/members.length];
+    });
+  }
+  kmClusters = { assignments, centroids };
+  const inertia = kmPoints.reduce((s,p,i) => { const c=centroids[assignments[i]]; return s+(p[0]-c[0])**2+(p[1]-c[1])**2; },0);
+  document.getElementById('kmeans-result').innerHTML = `Convergió en ${iterations} iteraciones · inercia (suma de distancias² a centroide): ${inertia.toFixed(0)}`;
+  drawKMeans();
+}
+
+function drawKMeans(){
+  const canvas = document.getElementById('kmeans-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  kmPoints.forEach((p,i) => {
+    const color = kmClusters ? clusterColors[kmClusters.assignments[i]%clusterColors.length] : '#8891a5';
+    ctx.beginPath(); ctx.arc(p[0],p[1],5,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
+  });
+  if (kmClusters){
+    kmClusters.centroids.forEach((c,ci) => {
+      ctx.strokeStyle = clusterColors[ci%clusterColors.length]; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(c[0]-8,c[1]-8); ctx.lineTo(c[0]+8,c[1]+8);
+      ctx.moveTo(c[0]+8,c[1]-8); ctx.lineTo(c[0]-8,c[1]+8); ctx.stroke();
+    });
+  }
+}
+seedData('blobs');
+
+// ================= PCA =================
+let pcaPoints = [];
+function seedDataPCA(){
+  pcaPoints = [];
+  const canvas = document.getElementById('pca-canvas');
+  const W = canvas.width, H = canvas.height, cx=W/2, cy=H/2;
+  for (let i=0;i<60;i++){
+    const t = (Math.random()-0.5)*300;
+    const noise = (Math.random()-0.5)*60;
+    pcaPoints.push([cx + t*0.9 - noise*0.3, cy + t*0.4 + noise*0.9]);
+  }
+  drawPCA(null);
+}
+function clearPointsPCA(){ pcaPoints=[]; drawPCA(null); document.getElementById('pca-result').innerHTML=''; }
+function addPointPCA(e){
+  const rect = e.target.getBoundingClientRect();
+  const scaleX = e.target.width/rect.width, scaleY = e.target.height/rect.height;
+  pcaPoints.push([(e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY]);
+  drawPCA(null);
+}
+
+function runPCA(){
+  if (pcaPoints.length < 3){ document.getElementById('pca-result').innerHTML = 'Añade al menos 3 puntos.'; return; }
+  const n = pcaPoints.length;
+  const mx = pcaPoints.reduce((s,p)=>s+p[0],0)/n;
+  const my = pcaPoints.reduce((s,p)=>s+p[1],0)/n;
+  let sxx=0, syy=0, sxy=0;
+  pcaPoints.forEach(p => { const dx=p[0]-mx, dy=p[1]-my; sxx+=dx*dx; syy+=dy*dy; sxy+=dx*dy; });
+  sxx/=n; syy/=n; sxy/=n;
+
+  // eigen decomposición 2x2 simétrica cerrada
+  const trace = sxx+syy, det = sxx*syy - sxy*sxy;
+  const disc = Math.sqrt(Math.max(0,(trace*trace)/4 - det));
+  const l1 = trace/2 + disc, l2 = trace/2 - disc;
+  function eigenvector(lambda){
+    if (Math.abs(sxy) > 1e-9) return normalize([lambda - syy, sxy]);
+    return sxx>=syy ? [1,0] : [0,1];
+  }
+  function normalize([x,y]){ const m=Math.hypot(x,y)||1; return [x/m,y/m]; }
+  const v1 = eigenvector(l1), v2 = eigenvector(l2);
+  const varExplained = l1/(l1+l2)*100;
+
+  drawPCA({ mx,my,v1,v2,l1,l2 });
+  document.getElementById('pca-result').innerHTML = `CP1 explica ${varExplained.toFixed(1)}% de la varianza (λ1=${l1.toFixed(1)}, λ2=${l2.toFixed(1)}) · dirección CP1 ≈ (${v1[0].toFixed(2)}, ${v1[1].toFixed(2)})`;
+}
+
+function drawPCA(pca){
+  const canvas = document.getElementById('pca-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  pcaPoints.forEach(p => { ctx.beginPath(); ctx.arc(p[0],p[1],5,0,2*Math.PI); ctx.fillStyle='#8891a5'; ctx.fill(); });
+  if (pca){
+    const { mx,my,v1,v2,l1,l2 } = pca;
+    const scale1 = Math.sqrt(l1)*2.2, scale2 = Math.sqrt(l2)*2.2;
+    ctx.strokeStyle = '#6ce8d1'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(mx-v1[0]*scale1, my-v1[1]*scale1); ctx.lineTo(mx+v1[0]*scale1, my+v1[1]*scale1); ctx.stroke();
+    ctx.strokeStyle = '#f0b35e'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(mx-v2[0]*scale2, my-v2[1]*scale2); ctx.lineTo(mx+v2[0]*scale2, my+v2[1]*scale2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(mx,my,5,0,2*Math.PI); ctx.fillStyle='#fff'; ctx.fill();
+  }
+}
+seedDataPCA();
+</script>
+</body>
+</html>

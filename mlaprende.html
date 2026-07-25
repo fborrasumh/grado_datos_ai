@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLAprende·AI · ML2: Aprendizaje Estadístico — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#6ce8d1; --accent-dim:#2c4a44;
+    --amber:#f0b35e; --violet:#a78bfa; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #14203a 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .tabs{ display:flex; gap:6px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+  .tab{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); padding:12px 18px; cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active{ color:var(--accent); border-color:var(--accent); }
+  .panel{ display:none; } .panel.active{ display:block; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  canvas{ width:100%; height:340px; background:var(--panel2); border-radius:10px; display:block; cursor:crosshair; margin-top:12px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+  select, input[type=number]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  input[type=number]{ width:70px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; border:none; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#062420; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  button.secondary{ background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.active-mode{ outline:2px solid var(--accent); }
+  .result-banner{ background:var(--panel2); border:1px solid var(--accent-dim); border-radius:10px; padding:14px 18px; margin-top:14px; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  .round-list{ font-family:'IBM Plex Mono', monospace; font-size:12px; margin-top:10px; color:var(--dim); line-height:1.9; max-height:140px; overflow-y:auto; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:10px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>MLAprende·AI</h1><span>28 · ML2: Aprendizaje Estadístico</span></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="svm">SVM lineal</div>
+    <div class="tab" data-tab="boost">AdaBoost (stumps)</div>
+  </div>
+
+  <div class="panel active" id="panel-svm">
+    <div class="box">
+      <div class="row">
+        <button id="mode-a" class="active-mode" onclick="setClassMode(1)">🔵 Clase A</button>
+        <button id="mode-b" class="secondary" onclick="setClassMode(-1)">🟠 Clase B</button>
+        <button class="secondary" onclick="seedSVM()">Datos de ejemplo</button>
+        <button class="secondary" onclick="clearSVM()">Borrar</button>
+        <button onclick="trainSVM()">Entrenar (descenso de gradiente)</button>
+      </div>
+      <canvas id="svm-canvas" width="800" height="340" onclick="addPointSVM(event)"></canvas>
+      <div class="result-banner" id="svm-result">Añade puntos de las dos clases y pulsa "Entrenar".</div>
+      <small class="hint">Minimiza la hinge loss con margen blando (soft-margin) mediante descenso de gradiente real sobre los pesos (w₁, w₂, b) — la línea es la frontera de decisión y las líneas discontinuas son los márgenes.</small>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-boost">
+    <div class="box">
+      <div class="row">
+        <button class="secondary" onclick="seedBoost()">Generar dataset en "L" (no separable con un solo stump)</button>
+        <input type="number" id="boost-rounds" value="4" min="1" max="8">
+        <button onclick="runBoost()">Ejecutar AdaBoost</button>
+      </div>
+      <canvas id="boost-canvas" width="800" height="340"></canvas>
+      <div class="result-banner" id="boost-result"></div>
+      <div class="round-list" id="boost-rounds-list"></div>
+      <small class="hint">Cada ronda elige el "stump" (umbral en un solo eje) que mejor clasifica los puntos según sus pesos actuales; los puntos mal clasificados pesan más en la siguiente ronda. Fíjate cómo la precisión combinada del conjunto sube aunque cada stump individual sea un clasificador débil.</small>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ================= SVM LINEAL =================
+let svmPoints = []; // [x,y,class]
+let currentClass = 1;
+let svmModel = null; // {w1,w2,b}
+
+function setClassMode(c){
+  currentClass = c;
+  document.getElementById('mode-a').className = c===1 ? 'active-mode' : 'secondary';
+  document.getElementById('mode-b').className = c===-1 ? 'active-mode' : 'secondary';
+}
+function addPointSVM(e){
+  const rect = e.target.getBoundingClientRect();
+  const scaleX = e.target.width/rect.width, scaleY = e.target.height/rect.height;
+  svmPoints.push([(e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY, currentClass]);
+  svmModel = null;
+  drawSVM();
+}
+function seedSVM(){
+  svmPoints = [];
+  for (let i=0;i<15;i++) svmPoints.push([100+Math.random()*220, 60+Math.random()*260, 1]);
+  for (let i=0;i<15;i++) svmPoints.push([480+Math.random()*220, 60+Math.random()*260, -1]);
+  svmModel = null;
+  drawSVM();
+}
+function clearSVM(){ svmPoints=[]; svmModel=null; drawSVM(); document.getElementById('svm-result').textContent='Añade puntos de las dos clases y pulsa "Entrenar".'; }
+
+function trainSVM(){
+  const classA = svmPoints.filter(p=>p[2]===1).length, classB = svmPoints.filter(p=>p[2]===-1).length;
+  if (classA<2 || classB<2){ document.getElementById('svm-result').textContent = 'Necesitas al menos 2 puntos de cada clase.'; return; }
+  // normalizar coordenadas
+  const cx=400, cy=170, scale=300;
+  const data = svmPoints.map(p => [(p[0]-cx)/scale, (p[1]-cy)/scale, p[2]]);
+  let w1=0.01, w2=0.01, b=0;
+  const lr = 0.05, lambda = 0.01, epochs = 400;
+  for (let e=0;e<epochs;e++){
+    data.forEach(([x,y,label]) => {
+      const margin = label*(w1*x + w2*y + b);
+      if (margin < 1){
+        w1 += lr*(label*x - lambda*w1);
+        w2 += lr*(label*y - lambda*w2);
+        b  += lr*(label);
+      } else {
+        w1 -= lr*lambda*w1;
+        w2 -= lr*lambda*w2;
+      }
+    });
+  }
+  svmModel = { w1,w2,b, cx,cy,scale };
+  let correct=0;
+  data.forEach(([x,y,label]) => { if (Math.sign(w1*x+w2*y+b)===label) correct++; });
+  document.getElementById('svm-result').innerHTML = `Entrenado (400 épocas) · precisión sobre los datos: ${correct}/${data.length} (${(100*correct/data.length).toFixed(0)}%)`;
+  drawSVM();
+}
+
+function drawSVM(){
+  const canvas = document.getElementById('svm-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  svmPoints.forEach(p => {
+    ctx.beginPath(); ctx.arc(p[0],p[1],6,0,2*Math.PI);
+    ctx.fillStyle = p[2]===1 ? '#6ce8d1' : '#f0b35e';
+    ctx.fill();
+  });
+  if (svmModel){
+    const { w1,w2,b,cx,cy,scale } = svmModel;
+    // linea w1*x+w2*y+b=k  en coords normalizadas -> convertir a pixeles
+    function lineAtOffset(k){
+      // resolver para x en [-1.3,1.3] normalizado: y = -(w1*x+b-k)/w2
+      const pts = [];
+      [-1.3,1.3].forEach(xn => {
+        if (Math.abs(w2)>1e-6){
+          const yn = -(w1*xn+b-k)/w2;
+          pts.push([cx+xn*scale, cy+yn*scale]);
+        }
+      });
+      return pts;
+    }
+    function drawLine(pts, color, dashed){
+      if (pts.length<2) return;
+      ctx.strokeStyle=color; ctx.lineWidth=dashed?1.5:2.5;
+      ctx.setLineDash(dashed?[6,5]:[]);
+      ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); ctx.lineTo(pts[1][0],pts[1][1]); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    drawLine(lineAtOffset(0), '#dfe4ee', false);
+    drawLine(lineAtOffset(1), '#8891a5', true);
+    drawLine(lineAtOffset(-1), '#8891a5', true);
+  }
+}
+seedSVM();
+
+// ================= ADABOOST =================
+let boostPts = []; // [x,y,class]
+let boostEnsemble = [];
+
+function seedBoost(){
+  boostPts = [];
+  const ox=80, oy=280, cellsize=32;
+  // brazo horizontal clase +1
+  for (let i=0;i<9;i++){ boostPts.push([ox+i*cellsize, oy-25, 1]); boostPts.push([ox+i*cellsize, oy-55, 1]); }
+  // brazo vertical clase +1
+  for (let j=1;j<7;j++){ boostPts.push([ox+25, oy-25-j*cellsize, 1]); boostPts.push([ox+55, oy-25-j*cellsize, 1]); }
+  // clase -1 en el hueco
+  for (let i=3;i<9;i++) for (let j=2;j<7;j++) if (i%2===0 && j%2===0) boostPts.push([ox+i*cellsize, oy-25-j*cellsize, -1]);
+  boostEnsemble = [];
+  drawBoost();
+  document.getElementById('boost-result').textContent = '';
+  document.getElementById('boost-rounds-list').innerHTML = '';
+}
+
+function stumpPredict(feature, thresh, polarity, p){
+  const v = p[feature];
+  return (polarity===1) ? (v<thresh? 1:-1) : (v<thresh? -1:1);
+}
+function bestStump(pts, w){
+  let best = null;
+  for (let feature=0; feature<2; feature++){
+    const vals = [...new Set(pts.map(p=>p[feature]))].sort((a,b)=>a-b);
+    const thresholds = vals.map(v=>v-1).concat([Math.max(...vals)+1]);
+    for (const thresh of thresholds){
+      for (const polarity of [1,-1]){
+        let err = 0;
+        pts.forEach((p,i) => { if (stumpPredict(feature,thresh,polarity,p) !== p[2]) err += w[i]; });
+        if (!best || err < best.err) best = { feature, thresh, polarity, err };
+      }
+    }
+  }
+  return best;
+}
+
+function runBoost(){
+  if (boostPts.length < 4){ document.getElementById('boost-result').textContent = 'Genera primero el dataset.'; return; }
+  const rounds = parseInt(document.getElementById('boost-rounds').value);
+  const n = boostPts.length;
+  let w = new Array(n).fill(1/n);
+  boostEnsemble = [];
+  const log = [];
+  for (let r=0;r<rounds;r++){
+    const stump = bestStump(boostPts, w);
+    const err = Math.min(Math.max(stump.err, 1e-10), 1-1e-10);
+    const alpha = 0.5*Math.log((1-err)/err);
+    boostEnsemble.push({...stump, alpha});
+    boostPts.forEach((p,i) => {
+      const pred = stumpPredict(stump.feature, stump.thresh, stump.polarity, p);
+      w[i] = w[i]*Math.exp(-alpha*p[2]*pred);
+    });
+    const sumW = w.reduce((a,b)=>a+b,0);
+    w = w.map(x=>x/sumW);
+    const acc = ensembleAccuracy();
+    log.push(`Ronda ${r+1}: stump en ${stump.feature===0?'x':'y'}=${stump.thresh.toFixed(0)} · error individual ${(err*100).toFixed(0)}% · α=${alpha.toFixed(2)} · precisión combinada: ${acc.correct}/${acc.total} (${acc.pct}%)`);
+  }
+  document.getElementById('boost-rounds-list').innerHTML = log.join('<br>');
+  const finalAcc = ensembleAccuracy();
+  document.getElementById('boost-result').innerHTML = `Ensemble final (${rounds} stumps combinados): <strong>${finalAcc.pct}%</strong> de precisión`;
+  drawBoost();
+}
+function ensemblePredict(p){
+  let s=0; boostEnsemble.forEach(st => { s += st.alpha*stumpPredict(st.feature, st.thresh, st.polarity, p); });
+  return s>=0?1:-1;
+}
+function ensembleAccuracy(){
+  let correct=0;
+  boostPts.forEach(p => { if (ensemblePredict(p)===p[2]) correct++; });
+  return { correct, total: boostPts.length, pct: (100*correct/boostPts.length).toFixed(0) };
+}
+
+function drawBoost(){
+  const canvas = document.getElementById('boost-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  boostEnsemble.forEach((st,i) => {
+    ctx.strokeStyle = i===boostEnsemble.length-1 ? '#a78bfa' : 'rgba(167,139,250,0.35)';
+    ctx.lineWidth = i===boostEnsemble.length-1 ? 2.5 : 1.5;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath();
+    if (st.feature===0){ ctx.moveTo(st.thresh,0); ctx.lineTo(st.thresh,canvas.height); }
+    else { ctx.moveTo(0,st.thresh); ctx.lineTo(canvas.width,st.thresh); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+  boostPts.forEach(p => {
+    ctx.beginPath(); ctx.arc(p[0],p[1],6,0,2*Math.PI);
+    ctx.fillStyle = p[2]===1 ? '#6ce8d1' : '#f0b35e';
+    ctx.fill();
+  });
+}
+seedBoost();
+</script>
+</body>
+</html>

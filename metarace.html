@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MetaRace·AI · Técnicas Avanzadas de Optimización — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#f0b35e; --accent-dim:#4a3a1f;
+    --violet:#a78bfa; --teal:#6ce8d1; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #3a2c14 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+  select, input[type=number]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  input[type=number]{ width:110px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; border:none; border-radius:10px; padding:11px 18px; cursor:pointer; background:var(--accent); color:#2b1d05; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  canvas{ width:100%; height:280px; background:var(--panel2); border-radius:10px; display:block; margin-top:14px; }
+  .legend-row{ display:flex; gap:20px; margin-top:8px; font-family:'IBM Plex Mono', monospace; font-size:11.5px; flex-wrap:wrap; }
+  .legend-row span::before{ content:"— "; }
+  .legend-row span.hc::before{ color:var(--bad); }
+  .legend-row span.sa::before{ color:var(--amber, var(--accent)); }
+  .legend-row span.ga::before{ color:var(--violet); }
+  .result-table{ margin-top:14px; }
+  table{ border-collapse:collapse; width:100%; font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+  th, td{ padding:8px 12px; border-bottom:1px solid var(--line); text-align:right; }
+  th{ color:var(--dim); text-transform:uppercase; font-size:10px; }
+  td.best{ color:var(--good); font-weight:700; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:12px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>MetaRace·AI</h1><span>36 · Técnicas Avanzadas de Optimización</span></div>
+  </div>
+
+  <div class="box">
+    <div class="row">
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">Función objetivo:</span>
+      <select id="func-select">
+        <option value="rastrigin">Rastrigin (muchos mínimos locales)</option>
+        <option value="ackley">Ackley (mínimo local engañoso)</option>
+        <option value="sphere">Esfera (convexa, control fácil)</option>
+      </select>
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">iteraciones =</span>
+      <input type="number" id="iters" value="300" min="50" max="1000" step="50">
+      <button onclick="runRace()">Ejecutar carrera de metaheurísticas</button>
+    </div>
+    <canvas id="race-canvas" width="800" height="280"></canvas>
+    <div class="legend-row">
+      <span class="hc">Hill Climbing (búsqueda local)</span>
+      <span class="sa">Recocido simulado (Simulated Annealing)</span>
+      <span class="ga">Algoritmo genético</span>
+    </div>
+    <div class="result-table" id="results-table"></div>
+    <small class="hint">Las tres metaheurísticas minimizan la misma función real, con el mismo número de evaluaciones. Hill Climbing suele quedarse atrapado en el primer mínimo local que encuentra; el recocido simulado acepta empeorar temporalmente (con probabilidad decreciente, según la "temperatura") para escapar de mínimos locales; el algoritmo genético mantiene una población y combina soluciones. El eje Y muestra el mejor valor encontrado hasta cada iteración (escala logarítmica).</small>
+  </div>
+</div>
+
+<script>
+function rastrigin(x,y){ return 20 + x*x+y*y - 10*Math.cos(2*Math.PI*x) - 10*Math.cos(2*Math.PI*y); }
+function ackley(x,y){
+  return -20*Math.exp(-0.2*Math.sqrt(0.5*(x*x+y*y))) - Math.exp(0.5*(Math.cos(2*Math.PI*x)+Math.cos(2*Math.PI*y))) + Math.E + 20;
+}
+function sphere(x,y){ return x*x+y*y; }
+function getFunc(){
+  const t = document.getElementById('func-select').value;
+  return t==='rastrigin' ? rastrigin : t==='ackley' ? ackley : sphere;
+}
+
+function hillClimbing(f, iters){
+  let x = (Math.random()-0.5)*10, y = (Math.random()-0.5)*10;
+  let best = f(x,y);
+  const history = [best];
+  for (let i=0;i<iters;i++){
+    const step = 0.3;
+    const nx = x + (Math.random()-0.5)*step*2;
+    const ny = y + (Math.random()-0.5)*step*2;
+    const nv = f(nx,ny);
+    if (nv < f(x,y)){ x=nx; y=ny; }
+    best = Math.min(best, f(x,y));
+    history.push(best);
+  }
+  return { history, bestVal: best, bestPos:[x,y] };
+}
+
+function simulatedAnnealing(f, iters){
+  let x = (Math.random()-0.5)*10, y = (Math.random()-0.5)*10;
+  let cur = f(x,y);
+  let best = cur;
+  const history = [best];
+  let T = 10;
+  const cooling = Math.pow(0.01/10, 1/iters);
+  for (let i=0;i<iters;i++){
+    const step = 0.5;
+    const nx = x + (Math.random()-0.5)*step*2;
+    const ny = y + (Math.random()-0.5)*step*2;
+    const nv = f(nx,ny);
+    const delta = nv - cur;
+    if (delta < 0 || Math.random() < Math.exp(-delta/T)){
+      x=nx; y=ny; cur=nv;
+    }
+    best = Math.min(best, cur);
+    history.push(best);
+    T *= cooling;
+  }
+  return { history, bestVal: best };
+}
+
+function geneticAlgorithm(f, iters){
+  const popSize = 20;
+  let pop = Array.from({length:popSize}, () => [(Math.random()-0.5)*10,(Math.random()-0.5)*10]);
+  let best = Math.min(...pop.map(p=>f(p[0],p[1])));
+  const history = [best];
+  const generations = Math.floor(iters/popSize) || 1;
+  for (let g=0; g<generations; g++){
+    const scored = pop.map(p => ({ p, fit: f(p[0],p[1]) })).sort((a,b)=>a.fit-b.fit);
+    const survivors = scored.slice(0, popSize/2).map(s=>s.p);
+    const children = [];
+    while (survivors.length + children.length < popSize){
+      const a = survivors[Math.floor(Math.random()*survivors.length)];
+      const b = survivors[Math.floor(Math.random()*survivors.length)];
+      let cx = (a[0]+b[0])/2 + (Math.random()-0.5)*0.6;
+      let cy = (a[1]+b[1])/2 + (Math.random()-0.5)*0.6;
+      children.push([cx,cy]);
+    }
+    pop = survivors.concat(children);
+    const genBest = Math.min(...pop.map(p=>f(p[0],p[1])));
+    best = Math.min(best, genBest);
+    for (let k=0;k<popSize;k++) history.push(best);
+  }
+  return { history: history.slice(0, iters+1), bestVal: best };
+}
+
+function runRace(){
+  const f = getFunc();
+  const iters = parseInt(document.getElementById('iters').value);
+  const hc = hillClimbing(f, iters);
+  const sa = simulatedAnnealing(f, iters);
+  const ga = geneticAlgorithm(f, iters);
+
+  drawRace([
+    { data: hc.history, color: '#f27878' },
+    { data: sa.history, color: '#f0b35e' },
+    { data: ga.history, color: '#a78bfa' }
+  ]);
+
+  document.getElementById('results-table').innerHTML = `
+    <table><thead><tr><th style="text-align:left;">Método</th><th>Mejor valor encontrado</th></tr></thead>
+    <tbody>
+      <tr><td style="text-align:left;">Hill Climbing</td><td class="${hc.bestVal===Math.min(hc.bestVal,sa.bestVal,ga.bestVal)?'best':''}">${hc.bestVal.toFixed(4)}</td></tr>
+      <tr><td style="text-align:left;">Recocido simulado</td><td class="${sa.bestVal===Math.min(hc.bestVal,sa.bestVal,ga.bestVal)?'best':''}">${sa.bestVal.toFixed(4)}</td></tr>
+      <tr><td style="text-align:left;">Algoritmo genético</td><td class="${ga.bestVal===Math.min(hc.bestVal,sa.bestVal,ga.bestVal)?'best':''}">${ga.bestVal.toFixed(4)}</td></tr>
+    </tbody></table>`;
+}
+
+function drawRace(series){
+  const canvas = document.getElementById('race-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, pad=40;
+  ctx.clearRect(0,0,W,H);
+  const allVals = series.flatMap(s => s.data).filter(v=>v>0);
+  const minV = Math.max(0.001, Math.min(...allVals));
+  const maxV = Math.max(...series.flatMap(s=>s.data));
+  const logMin = Math.log(minV), logMax = Math.log(Math.max(maxV,minV*10));
+  const maxLen = Math.max(...series.map(s=>s.data.length));
+
+  ctx.strokeStyle = '#4a3a1f'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.stroke();
+
+  series.forEach(s => {
+    ctx.strokeStyle = s.color; ctx.lineWidth=2;
+    ctx.beginPath();
+    s.data.forEach((v,i) => {
+      const x = pad + i/(maxLen-1)*(W-2*pad);
+      const logV = Math.log(Math.max(v,minV));
+      const y = H-pad - (logV-logMin)/(logMax-logMin)*(H-2*pad);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  });
+}
+
+runRace();
+</script>
+</body>
+</html>

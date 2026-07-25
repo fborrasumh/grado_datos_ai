@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ParallelIA · Computación Paralela — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#f0b35e; --accent-dim:#4a3a1f;
+    --violet:#a78bfa; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #3a2c14 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:880px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+  select, input[type=number]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:10px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:13.5px; }
+  input[type=number]{ width:110px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px; border:none; border-radius:10px; padding:11px 18px; cursor:pointer; background:var(--accent); color:#2b1d05; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  button:disabled{ opacity:.4; cursor:default; }
+  canvas{ width:100%; height:220px; background:var(--panel2); border-radius:10px; display:block; margin-top:14px; }
+  .result-table{ margin-top:14px; overflow-x:auto; }
+  table{ border-collapse:collapse; width:100%; font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+  th, td{ padding:8px 12px; border-bottom:1px solid var(--line); text-align:right; }
+  th{ color:var(--dim); text-transform:uppercase; font-size:10px; }
+  .legend-row{ display:flex; gap:20px; margin-top:8px; font-family:'IBM Plex Mono', monospace; font-size:11.5px; }
+  .legend-row span::before{ content:"— "; }
+  .legend-row span.real::before{ color:var(--accent); }
+  .legend-row span.amdahl::before{ color:var(--violet); }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:12px; line-height:1.6; }
+  .status{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>ParallelIA</h1><span>34 · Computación Paralela</span></div>
+  </div>
+
+  <div class="box">
+    <div class="row">
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">Contar primos hasta N =</span>
+      <input type="number" id="n-limit" value="600000" step="50000" min="50000">
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">fracción paralelizable (Amdahl) =</span>
+      <input type="number" id="amdahl-f" value="0.9" step="0.05" min="0.1" max="1">
+      <button id="btn-run" onclick="runBenchmark()">Ejecutar benchmark real (1, 2, 4, 8 workers)</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="result-table" id="result-table"></div>
+    <canvas id="speedup-canvas" width="800" height="220"></canvas>
+    <div class="legend-row"><span class="real">Speedup real medido (Web Workers)</span><span class="amdahl">Speedup teórico (ley de Amdahl)</span></div>
+    <small class="hint">Esto NO es una simulación: se crean Web Workers reales del navegador (hilos del sistema operativo) que cuentan primos en paralelo sobre trozos del rango, y se cronometra el tiempo real de reloj de cada configuración con <code>performance.now()</code>. Verás que el speedup real se queda por debajo del ideal (Nx) por el coste de crear workers y repartir el trabajo — justo lo que predice la ley de Amdahl con una fracción paralelizable &lt;100%.</small>
+  </div>
+</div>
+
+<script>
+const workerCode = `
+self.onmessage = function(e){
+  const { start, end } = e.data;
+  let count = 0;
+  for (let n = Math.max(2,start); n < end; n++){
+    let isPrime = n > 1;
+    for (let d = 2; d*d <= n; d++){
+      if (n % d === 0){ isPrime = false; break; }
+    }
+    if (isPrime) count++;
+  }
+  self.postMessage(count);
+};
+`;
+const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+const workerURL = URL.createObjectURL(workerBlob);
+
+function runParallel(N, numWorkers){
+  return new Promise((resolve) => {
+    const chunk = Math.ceil(N/numWorkers);
+    let results = 0, completed = 0;
+    const workers = [];
+    const t0 = performance.now();
+    for (let i=0;i<numWorkers;i++){
+      const w = new Worker(workerURL);
+      workers.push(w);
+      w.onmessage = (e) => {
+        results += e.data;
+        completed++;
+        w.terminate();
+        if (completed === numWorkers){
+          const t1 = performance.now();
+          resolve({ time: t1-t0, count: results });
+        }
+      };
+      w.postMessage({ start: i*chunk, end: Math.min(N, (i+1)*chunk) });
+    }
+  });
+}
+
+function amdahlSpeedup(p, f){ return 1/((1-f)+f/p); }
+
+async function runBenchmark(){
+  const N = parseInt(document.getElementById('n-limit').value);
+  const f = parseFloat(document.getElementById('amdahl-f').value);
+  const btn = document.getElementById('btn-run');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  const configs = [1,2,4,8];
+  const results = [];
+  for (const w of configs){
+    status.textContent = `Ejecutando con ${w} worker(s)...`;
+    const r = await runParallel(N, w);
+    results.push({ workers: w, time: r.time, count: r.count });
+  }
+  status.textContent = `Completado. Primos encontrados hasta ${N.toLocaleString('es-ES')}: ${results[0].count.toLocaleString('es-ES')}`;
+  btn.disabled = false;
+
+  const baseTime = results[0].time;
+  document.getElementById('result-table').innerHTML = `
+    <table><thead><tr><th>Workers</th><th>Tiempo (ms)</th><th>Speedup real</th><th>Speedup Amdahl</th></tr></thead>
+    <tbody>${results.map(r => `<tr><td style="text-align:left;">${r.workers}</td><td>${r.time.toFixed(0)}</td><td>${(baseTime/r.time).toFixed(2)}×</td><td>${amdahlSpeedup(r.workers,f).toFixed(2)}×</td></tr>`).join('')}</tbody></table>`;
+
+  drawSpeedup(results, baseTime, f);
+}
+
+function drawSpeedup(results, baseTime, f){
+  const canvas = document.getElementById('speedup-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, pad=40;
+  ctx.clearRect(0,0,W,H);
+  const maxP = 8;
+  const maxSpeedup = Math.max(maxP, ...results.map(r=>baseTime/r.time));
+  const toPx = (p,s) => [pad + (p-1)/(maxP-1)*(W-2*pad), H-pad - (s-1)/(maxSpeedup-1)*(H-2*pad)];
+
+  ctx.strokeStyle = '#4a3a1f'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.stroke();
+
+  // amdahl teorico (curva continua)
+  ctx.strokeStyle = '#a78bfa'; ctx.lineWidth=2;
+  ctx.beginPath();
+  for (let p=1;p<=maxP;p+=0.2){
+    const [x,y] = toPx(p, amdahlSpeedup(p,f));
+    p===1?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // real medido (puntos + linea)
+  ctx.strokeStyle = '#f0b35e'; ctx.lineWidth=2.5;
+  ctx.beginPath();
+  results.forEach((r,i) => {
+    const [x,y] = toPx(r.workers, baseTime/r.time);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  results.forEach(r => {
+    const [x,y] = toPx(r.workers, baseTime/r.time);
+    ctx.beginPath(); ctx.arc(x,y,5,0,2*Math.PI); ctx.fillStyle='#f0b35e'; ctx.fill();
+  });
+}
+</script>
+</body>
+</html>

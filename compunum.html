@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CompuNum·AI · Matemática Computacional — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#a78bfa; --accent-dim:#3a2f5c;
+    --amber:#f0b35e; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #241a3a 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .tabs{ display:flex; gap:6px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+  .tab{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--dim); padding:12px 18px; cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active{ color:var(--accent); border-color:var(--accent); }
+  .panel{ display:none; } .panel.active{ display:block; }
+  .lab-box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:20px; }
+  .field-label{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--dim); margin-bottom:6px; display:block; }
+  input[type=text], input[type=number]{ background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:10px; font-family:'IBM Plex Mono', monospace; font-size:14px; width:100%; }
+  textarea{ width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:12px; border-radius:10px; font-family:'IBM Plex Mono', monospace; font-size:13.5px; min-height:90px; resize:vertical; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+  .field{ flex:1; min-width:120px; }
+  select{ flex:1; min-width:160px; background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:10px; font-family:'Space Grotesk', sans-serif; font-size:14px; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; border:none; border-radius:10px; padding:13px 22px; cursor:pointer; background:var(--accent); color:#1c1330; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  canvas{ width:100%; height:260px; background:var(--panel2); border-radius:10px; display:block; margin-top:14px; }
+  .iter-table{ overflow-x:auto; margin-top:14px; }
+  table{ border-collapse:collapse; width:100%; font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+  th, td{ padding:6px 10px; border-bottom:1px solid var(--line); text-align:right; }
+  th{ color:var(--amber); text-transform:uppercase; font-size:10px; }
+  .error-box{ color:var(--bad); font-family:'IBM Plex Mono', monospace; font-size:13px; margin-top:10px; }
+  .warn-box{ color:var(--amber); font-family:'IBM Plex Mono', monospace; font-size:12.5px; margin-top:10px; }
+  .result-banner{ background:var(--panel2); border:1px solid var(--accent-dim); border-radius:10px; padding:14px 18px; margin-top:14px; font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--accent); }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>CompuNum·AI</h1><span>19 · Matemática Computacional</span></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="raices">Búsqueda de raíces</div>
+    <div class="tab" data-tab="lineal">Sistemas lineales iterativos</div>
+  </div>
+
+  <div class="panel active" id="panel-raices">
+    <div class="lab-box">
+      <div class="row"><div class="field"><span class="field-label">f(x)</span><input type="text" id="root-expr" value="x^3 - x - 2"></div></div>
+      <div class="row">
+        <div class="field"><span class="field-label">Método</span>
+          <select id="root-method">
+            <option value="biseccion">Bisección</option>
+            <option value="newton">Newton-Raphson</option>
+          </select>
+        </div>
+        <div class="field" id="root-a-field"><span class="field-label">a (extremo izq.)</span><input type="number" id="root-a" value="1" step="0.1"></div>
+        <div class="field" id="root-b-field"><span class="field-label">b (extremo der.)</span><input type="number" id="root-b" value="2" step="0.1"></div>
+        <div class="field" id="root-x0-field" style="display:none;"><span class="field-label">x₀ inicial</span><input type="number" id="root-x0" value="1.5" step="0.1"></div>
+        <div class="field"><span class="field-label">Tolerancia</span><input type="number" id="root-tol" value="0.0001" step="0.0001"></div>
+      </div>
+      <div class="row"><button onclick="solveRoot()">Ejecutar</button></div>
+      <canvas id="root-canvas" width="800" height="260"></canvas>
+      <div id="root-output"></div>
+      <small class="hint">Sintaxis f(x): usa <code>*</code> para multiplicar, <code>^</code> para potencias, funciones <code>sin, cos, exp, sqrt, abs</code>. Newton estima f'(x) por diferencias finitas (no hace falta derivar a mano).</small>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-lineal">
+    <div class="lab-box">
+      <div class="row">
+        <div class="field"><span class="field-label">Matriz A (una fila por línea)</span>
+          <textarea id="lin-A">4, 1, 1
+1, 5, 1
+1, 1, 6</textarea>
+        </div>
+        <div class="field"><span class="field-label">Vector b</span>
+          <textarea id="lin-b">7
+9
+12</textarea>
+        </div>
+      </div>
+      <div class="row">
+        <select id="lin-method">
+          <option value="jacobi">Jacobi</option>
+          <option value="gauss-seidel">Gauss-Seidel</option>
+        </select>
+        <div class="field"><span class="field-label">Tolerancia</span><input type="number" id="lin-tol" value="0.0001" step="0.0001"></div>
+        <div class="field"><span class="field-label">Máx. iteraciones</span><input type="number" id="lin-maxiter" value="30"></div>
+      </div>
+      <div class="row"><button onclick="solveLinear()">Ejecutar iteración</button></div>
+      <div id="lin-output"></div>
+      <small class="hint">Ambos métodos convergen garantizado si la matriz es diagonal-dominante (|a_ii| ≥ suma de los demás en su fila); el laboratorio te avisa si no lo es.</small>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('root-method').addEventListener('change', (e) => {
+  const isNewton = e.target.value === 'newton';
+  document.getElementById('root-a-field').style.display = isNewton ? 'none' : 'block';
+  document.getElementById('root-b-field').style.display = isNewton ? 'none' : 'block';
+  document.getElementById('root-x0-field').style.display = isNewton ? 'block' : 'none';
+});
+
+// ---------- f(x) parser ----------
+function makeF1(expr){
+  const safe = /^[0-9a-zA-Z_+\-*/().,\s^]+$/;
+  if (!safe.test(expr)) throw new Error('La expresión contiene caracteres no permitidos.');
+  const jsExpr = expr.replace(/\^/g, '**');
+  const fn = new Function('x', `with (Math) { return ${jsExpr}; }`);
+  const t = fn(1);
+  if (typeof t !== 'number' || isNaN(t)) throw new Error('La expresión no evalúa a un número válido.');
+  return fn;
+}
+function numericDeriv(f, x, h=1e-5){ return (f(x+h)-f(x-h))/(2*h); }
+
+function solveRoot(){
+  const out = document.getElementById('root-output');
+  const ctx = document.getElementById('root-canvas').getContext('2d');
+  out.innerHTML = '';
+  let f;
+  try { f = makeF1(document.getElementById('root-expr').value); }
+  catch(e){ out.innerHTML = `<div class="error-box">⚠ ${e.message}</div>`; return; }
+
+  const method = document.getElementById('root-method').value;
+  const tol = parseFloat(document.getElementById('root-tol').value);
+  const iters = [];
+  let root = null;
+
+  if (method === 'biseccion'){
+    let a = parseFloat(document.getElementById('root-a').value);
+    let b = parseFloat(document.getElementById('root-b').value);
+    if (f(a)*f(b) > 0){ out.innerHTML = `<div class="error-box">⚠ f(a) y f(b) deben tener signos opuestos para garantizar una raíz en [a,b] (f(a)=${f(a).toFixed(4)}, f(b)=${f(b).toFixed(4)}).</div>`; return; }
+    let i=0;
+    while (i<100){
+      const m = (a+b)/2;
+      const fm = f(m);
+      iters.push({ i: i+1, x: m, fx: fm, err: (b-a)/2 });
+      if (Math.abs(fm) < tol || (b-a)/2 < tol){ root = m; break; }
+      if (f(a)*fm < 0) b = m; else a = m;
+      i++;
+    }
+  } else {
+    let x = parseFloat(document.getElementById('root-x0').value);
+    let i=0;
+    while (i<100){
+      const fx = f(x);
+      const dfx = numericDeriv(f, x);
+      if (Math.abs(dfx) < 1e-12){ out.innerHTML = `<div class="error-box">⚠ Derivada casi nula en x=${x.toFixed(4)}; Newton no puede continuar. Prueba otro x₀.</div>`; return; }
+      const xNew = x - fx/dfx;
+      iters.push({ i: i+1, x: xNew, fx: f(xNew), err: Math.abs(xNew-x) });
+      if (Math.abs(xNew-x) < tol){ root = xNew; break; }
+      x = xNew;
+      i++;
+    }
+  }
+
+  if (root === null){ out.innerHTML += `<div class="warn-box">No se alcanzó la tolerancia en 100 iteraciones.</div>`; }
+  out.innerHTML += `<div class="result-banner">Raíz aproximada: x ≈ ${root!==null?root.toFixed(6):'(sin converger)'} tras ${iters.length} iteraciones</div>`;
+  out.innerHTML += `<div class="iter-table"><table><thead><tr><th>Iter.</th><th>x</th><th>f(x)</th><th>Error</th></tr></thead><tbody>${
+    iters.map(it => `<tr><td style="text-align:left;">${it.i}</td><td>${it.x.toFixed(6)}</td><td>${it.fx.toExponential(3)}</td><td>${it.err.toExponential(3)}</td></tr>`).join('')
+  }</tbody></table></div>`;
+
+  drawFunction(ctx, f, iters, root);
+}
+
+function drawFunction(ctx, f, iters, root){
+  const canvas = ctx.canvas, W = canvas.width, H = canvas.height, pad=40;
+  ctx.clearRect(0,0,W,H);
+  const xs = iters.map(it=>it.x);
+  const center = root !== null ? root : (xs.length?xs[xs.length-1]:0);
+  const span = Math.max(2, ...xs.map(x=>Math.abs(x-center)*2.5), 3);
+  const minX = center - span, maxX = center + span;
+  const N = 200;
+  let pts = [];
+  for (let i=0;i<=N;i++){
+    const x = minX + (maxX-minX)*i/N;
+    try { pts.push([x, f(x)]); } catch(e){}
+  }
+  const ys = pts.map(p=>p[1]).filter(y=>isFinite(y));
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const rangeY = (maxY-minY)||1;
+  const toPx = (x,y) => [pad + (x-minX)/(maxX-minX)*(W-2*pad), H-pad - (y-minY)/rangeY*(H-2*pad)];
+
+  ctx.strokeStyle = '#3a2f5c'; ctx.lineWidth=1;
+  const [zx] = toPx(0,0);
+  const [,zy] = toPx(0,0);
+  ctx.beginPath(); ctx.moveTo(pad,zy); ctx.lineTo(W-pad,zy); ctx.stroke(); // eje x en y=0
+
+  ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  pts.forEach(([x,y],i) => { if(!isFinite(y)) return; const [px,py]=toPx(x,y); i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+  ctx.stroke();
+
+  iters.forEach(it => {
+    const [px,py] = toPx(it.x, it.fx);
+    ctx.beginPath(); ctx.arc(px,py,3,0,2*Math.PI); ctx.fillStyle='#f0b35e'; ctx.fill();
+  });
+  if (root !== null){
+    const [px,py] = toPx(root, 0);
+    ctx.beginPath(); ctx.arc(px,py,6,0,2*Math.PI); ctx.fillStyle='#8fe3a0'; ctx.fill();
+  }
+}
+
+solveRoot();
+
+// ---------- Sistemas lineales iterativos ----------
+function parseMatrix(text){
+  return text.trim().split('\n').map(r => r.trim()).filter(r=>r.length).map(r => r.split(/[,\s]+/).map(Number));
+}
+function parseVector(text){
+  return text.trim().split('\n').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+}
+
+function solveLinear(){
+  const out = document.getElementById('lin-output');
+  out.innerHTML = '';
+  let A, b;
+  try {
+    A = parseMatrix(document.getElementById('lin-A').value);
+    b = parseVector(document.getElementById('lin-b').value);
+  } catch(e){ out.innerHTML = `<div class="error-box">⚠ Formato inválido en A o b.</div>`; return; }
+  const n = A.length;
+  if (A.some(r=>r.length!==n) || b.length!==n){ out.innerHTML = `<div class="error-box">⚠ A debe ser n×n y b debe tener n elementos (n=${n}).</div>`; return; }
+
+  // comprobar dominancia diagonal
+  const dominant = A.every((row,i) => Math.abs(row[i]) >= row.reduce((s,v,j)=>j===i?s:s+Math.abs(v),0));
+  let warn = dominant ? '' : `<div class="warn-box">⚠ La matriz NO es diagonal-dominante: la convergencia no está garantizada (puede divergir).</div>`;
+
+  const method = document.getElementById('lin-method').value;
+  const tol = parseFloat(document.getElementById('lin-tol').value);
+  const maxIter = parseInt(document.getElementById('lin-maxiter').value);
+
+  let x = new Array(n).fill(0);
+  const iters = [];
+  for (let k=0; k<maxIter; k++){
+    const xNew = [...x];
+    for (let i=0;i<n;i++){
+      let sum = b[i];
+      for (let j=0;j<n;j++){
+        if (j===i) continue;
+        const xj = (method==='gauss-seidel') ? xNew[j] : x[j];
+        sum -= A[i][j]*xj;
+      }
+      xNew[i] = sum / A[i][i];
+    }
+    const diff = Math.sqrt(xNew.reduce((s,v,i)=>s+(v-x[i])**2,0));
+    x = xNew;
+    iters.push({ k:k+1, x:[...x], diff });
+    if (diff < tol) break;
+  }
+
+  const converged = iters.length && iters[iters.length-1].diff < tol;
+  out.innerHTML = warn + `<div class="result-banner">${converged ? '✓ Convergió' : '✗ No convergió'} en ${iters.length} iteraciones. Solución: (${x.map(v=>v.toFixed(5)).join(', ')})</div>`;
+  out.innerHTML += `<div class="iter-table"><table><thead><tr><th>Iter.</th>${x.map((_,i)=>`<th>x${i+1}</th>`).join('')}<th>‖Δx‖</th></tr></thead><tbody>${
+    iters.map(it => `<tr><td style="text-align:left;">${it.k}</td>${it.x.map(v=>`<td>${v.toFixed(5)}</td>`).join('')}<td>${it.diff.toExponential(3)}</td></tr>`).join('')
+  }</tbody></table></div>`;
+}
+
+solveLinear();
+</script>
+</body>
+</html>

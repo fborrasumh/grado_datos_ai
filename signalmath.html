@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalMath·AI · Procesamiento de Señales — CDIA UMH</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b28; --line:#232838;
+    --text:#dfe4ee; --dim:#8891a5; --accent:#f0b35e; --accent-dim:#4a3a1f;
+    --violet:#a78bfa; --bad:#f27878; --good:#8fe3a0;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background: radial-gradient(circle at 15% 0%, #3a2c14 0%, transparent 45%), var(--bg); color:var(--text); font-family:'Space Grotesk', sans-serif; }
+  a{color:var(--accent);}
+  .wrap{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+  .back{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--dim); text-decoration:none; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{ font-size:22px; margin:0; font-weight:700; }
+  .brand span{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--accent); border:1px solid var(--accent-dim); padding:2px 8px; border-radius:100px; }
+  .box{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:18px; }
+  .comp-row{ display:flex; gap:14px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .comp-row .lbl{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim); width:70px; }
+  input[type=range]{ width:130px; }
+  input[type=number]{ width:60px; background:var(--panel2); border:1px solid var(--line); color:var(--text); padding:6px 8px; border-radius:6px; font-family:'IBM Plex Mono', monospace; font-size:12px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; align-items:center; }
+  button{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; border:none; border-radius:10px; padding:10px 16px; cursor:pointer; background:var(--accent); color:#2b1d05; transition:transform .12s ease; }
+  button:hover{ transform:translateY(-1px); }
+  canvas{ width:100%; height:180px; background:var(--panel2); border-radius:10px; display:block; margin-top:10px; }
+  .panel-title{ font-family:'IBM Plex Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin-bottom:8px; }
+  small.hint{ display:block; color:var(--dim); font-size:11.5px; margin-top:12px; line-height:1.6; }
+  .legend-row{ display:flex; gap:20px; margin-top:6px; font-family:'IBM Plex Mono', monospace; font-size:11.5px; }
+  .legend-row span::before{ content:"— "; }
+  .legend-row span.o::before{ color:var(--dim); }
+  .legend-row span.f::before{ color:var(--violet); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="index.html">← CDIA·Suite</a>
+    <div class="brand"><h1>SignalMath·AI</h1><span>32 · Procesamiento de Señales</span></div>
+  </div>
+
+  <div class="box">
+    <div class="panel-title">Constructor de señal (suma de senoides)</div>
+    <div class="comp-row"><span class="lbl">Onda 1</span>freq <input type="number" id="f1" value="3" min="0" max="30"> amp <input type="number" id="a1" value="1" step="0.1" min="0" max="3"></div>
+    <div class="comp-row"><span class="lbl">Onda 2</span>freq <input type="number" id="f2" value="8" min="0" max="30"> amp <input type="number" id="a2" value="0.5" step="0.1" min="0" max="3"></div>
+    <div class="comp-row"><span class="lbl">Onda 3</span>freq <input type="number" id="f3" value="0" min="0" max="30"> amp <input type="number" id="a3" value="0" step="0.1" min="0" max="3"></div>
+    <div class="comp-row"><span class="lbl">Ruido</span><input type="range" id="noise" min="0" max="1" step="0.05" value="0.1"><span id="noise-val" style="font-family:'IBM Plex Mono', monospace; font-size:12px;">0.1</span></div>
+    <div class="row"><button onclick="update()">Generar y calcular DFT</button></div>
+
+    <div class="panel-title">Señal en el dominio del tiempo</div>
+    <canvas id="time-canvas" width="800" height="180"></canvas>
+
+    <div class="panel-title" style="margin-top:16px;">Espectro de frecuencias (magnitud de la DFT)</div>
+    <canvas id="freq-canvas" width="800" height="180"></canvas>
+  </div>
+
+  <div class="box">
+    <div class="panel-title">Filtro paso-bajo (frecuencia de corte)</div>
+    <div class="row">
+      <span style="font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--dim);">corte (bin) =</span>
+      <input type="range" id="cutoff" min="1" max="30" value="10" oninput="document.getElementById('cutoff-val').textContent=this.value; filterAndDraw();">
+      <span id="cutoff-val" style="font-family:'IBM Plex Mono', monospace; font-size:12px;">10</span>
+    </div>
+    <canvas id="filtered-canvas" width="800" height="180"></canvas>
+    <div class="legend-row"><span class="o">Señal original (con ruido)</span><span class="f">Reconstruida tras filtrar (DFT → poner a 0 frecuencias &gt; corte → IDFT)</span></div>
+    <small class="hint">Todo el cálculo es una Transformada Discreta de Fourier (DFT) real, calculada de forma directa sobre N=128 muestras — sin llamadas a IA. El filtro paso-bajo elimina literalmente los coeficientes de alta frecuencia del espectro y reconstruye la señal con la Transformada Inversa (IDFT), por eso suaviza el ruido pero también difumina detalles finos si el corte es muy bajo.</small>
+  </div>
+</div>
+
+<script>
+const N = 128;
+let signal = [];
+
+function update(){
+  const f1=parseFloat(document.getElementById('f1').value), a1=parseFloat(document.getElementById('a1').value);
+  const f2=parseFloat(document.getElementById('f2').value), a2=parseFloat(document.getElementById('a2').value);
+  const f3=parseFloat(document.getElementById('f3').value), a3=parseFloat(document.getElementById('a3').value);
+  const noise = parseFloat(document.getElementById('noise').value);
+  document.getElementById('noise-val').textContent = noise.toFixed(2);
+  signal = Array.from({length:N}, (_,n) => {
+    let v = a1*Math.sin(2*Math.PI*f1*n/N) + a2*Math.sin(2*Math.PI*f2*n/N) + a3*Math.sin(2*Math.PI*f3*n/N);
+    v += (Math.random()-0.5)*2*noise;
+    return v;
+  });
+  drawTime('time-canvas', signal, '#f0b35e');
+  const { mag } = dft(signal);
+  drawSpectrum(mag);
+  filterAndDraw();
+}
+
+function dft(x){
+  const re = new Array(N).fill(0), im = new Array(N).fill(0);
+  for (let k=0;k<N;k++){
+    for (let n=0;n<N;n++){
+      const ang = -2*Math.PI*k*n/N;
+      re[k] += x[n]*Math.cos(ang);
+      im[k] += x[n]*Math.sin(ang);
+    }
+  }
+  const mag = re.map((r,i) => Math.sqrt(r*r+im[i]*im[i])/N);
+  return { re, im, mag };
+}
+function idft(re, im){
+  const out = new Array(N).fill(0);
+  for (let n=0;n<N;n++){
+    let s=0;
+    for (let k=0;k<N;k++){
+      const ang = 2*Math.PI*k*n/N;
+      s += re[k]*Math.cos(ang) - im[k]*Math.sin(ang);
+    }
+    out[n] = s/N;
+  }
+  return out;
+}
+
+function drawTime(canvasId, data, color){
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const maxAbs = Math.max(1, ...data.map(Math.abs));
+  ctx.strokeStyle = '#232838'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,canvas.height/2); ctx.lineTo(canvas.width,canvas.height/2); ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth=2;
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = i/(N-1)*canvas.width;
+    const y = canvas.height/2 - (v/maxAbs)*(canvas.height/2-15);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function drawSpectrum(mag){
+  const canvas = document.getElementById('freq-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const half = N/2;
+  const maxMag = Math.max(0.01, ...mag.slice(0,half));
+  const barW = canvas.width/half;
+  ctx.fillStyle = '#a78bfa';
+  for (let k=0;k<half;k++){
+    const h = (mag[k]/maxMag)*(canvas.height-20);
+    ctx.fillRect(k*barW, canvas.height-h-10, barW-1, h);
+  }
+}
+
+function filterAndDraw(){
+  if (!signal.length) return;
+  const cutoff = parseInt(document.getElementById('cutoff').value);
+  const { re, im } = dft(signal);
+  const reF = re.map((v,k) => { const kk = k<=N/2?k:N-k; return kk>cutoff ? 0 : v; });
+  const imF = im.map((v,k) => { const kk = k<=N/2?k:N-k; return kk>cutoff ? 0 : v; });
+  const reconstructed = idft(reF, imF);
+  drawTimeCompare(signal, reconstructed);
+}
+
+function drawTimeCompare(orig, rec){
+  const canvas = document.getElementById('filtered-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const maxAbs = Math.max(1, ...orig.map(Math.abs), ...rec.map(Math.abs));
+  ctx.strokeStyle = '#232838'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,canvas.height/2); ctx.lineTo(canvas.width,canvas.height/2); ctx.stroke();
+  function plot(data,color,width){
+    ctx.strokeStyle=color; ctx.lineWidth=width;
+    ctx.beginPath();
+    data.forEach((v,i) => {
+      const x = i/(N-1)*canvas.width;
+      const y = canvas.height/2 - (v/maxAbs)*(canvas.height/2-15);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  plot(orig, '#8891a5', 1.5);
+  plot(rec, '#a78bfa', 2.5);
+}
+
+update();
+</script>
+</body>
+</html>
